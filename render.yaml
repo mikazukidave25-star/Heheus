@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: phamdat-vote-service
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: VOTE_SERVICE_SECRET
+        sync: false

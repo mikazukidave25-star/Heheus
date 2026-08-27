@@ -1,0 +1,14 @@
+{
+  "name": "vote-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone service that does top.gg voting (puppeteer-extra + stealth plugin to get past Cloudflare's bot check). Split out from the main bot service so Chrome's memory usage doesn't compete with the Discord bot + dashboard on a free instance.",
+  "main": "server.js",
+  "dependencies": {
+    "captchaly": "latest",
+    "express": "^4",
+    "puppeteer": "^23",
+    "puppeteer-extra": "^3",
+    "puppeteer-extra-plugin-stealth": "^2"
+  }
+}
