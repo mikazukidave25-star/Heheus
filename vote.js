@@ -148,7 +148,15 @@ async function run({ token, botId, captchalyApiKey }) {
             return { success: true, message: 'Already voted' };
         }
         if (btnData.status !== 'found') {
-            return { success: false, message: 'Vote button never appeared (timed out)' };
+            const diag = await page.evaluate(() => ({
+                url: window.location.href,
+                title: document.title,
+                bodySnippet: (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 400),
+            }));
+            return {
+                success: false,
+                message: `Vote button never appeared (timed out). url=${diag.url} title=${JSON.stringify(diag.title)} body=${JSON.stringify(diag.bodySnippet)}`,
+            };
         }
 
         await delay(1500);
