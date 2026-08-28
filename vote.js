@@ -18,6 +18,13 @@ const CHROME_PATH = process.env.CHROME_PATH || '/usr/bin/chromium';
 
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
+// Races a promise against a timeout, so a hung underlying call (e.g. an API
+// request that never resolves) can't freeze the whole vote flow forever.
+const withTimeout = (promise, ms, label) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
+]);
+
 // Accepts either a JSON array exported from a cookie-manager browser
 // extension (Cookie-Editor and similar: [{name, value, domain, path,
 // expirationDate, httpOnly, secure, ...}, ...]) or a raw
@@ -80,7 +87,7 @@ async function solveTurnstile(page, captchalyApiKey) {
     try {
         const { CaptchalyClient } = require('captchaly');
         const client = new CaptchalyClient(captchalyApiKey);
-        const result = await client.turnstile(page.url(), siteKey);
+        const result = await withTimeout(client.turnstile(page.url(), siteKey), 60000, 'Captchaly turnstile solve');
 
         await page.evaluate((t) => {
             const input = document.querySelector('[name="cf-turnstile-response"]');
