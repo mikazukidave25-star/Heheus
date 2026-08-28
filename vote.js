@@ -1,9 +1,14 @@
 // Votes for one top.gg bot listing using one Discord account. Adapted from a
 // script the user had working before (puppeteer-extra + stealth plugin to
-// get past Cloudflare's bot check, plus injecting the Discord token directly
-// into localStorage instead of driving the login form) - DrissionPage has no
-// real equivalent to the stealth plugin, so this reuses the proven approach
-// instead of trying to replicate it in Python.
+// get past Cloudflare's bot check) - DrissionPage has no real equivalent to
+// the stealth plugin, so this reuses the proven approach instead of trying
+// to replicate it in Python.
+//
+// Authenticates using real Discord session cookies (copied from an already-
+// logged-in browser) instead of injecting the account token into
+// localStorage - a fresh-token login looks like a new/foreign session to
+// Discord's anti-fraud detection and risked getting the account flagged,
+// where reusing real cookies looks like the same ongoing session.
 
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -12,6 +17,23 @@ puppeteer.use(StealthPlugin());
 const CHROME_PATH = process.env.CHROME_PATH || '/usr/bin/chromium';
 
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
+// Parses a raw "name=value; name2=value2" cookie header string (the format
+// you get copying the Cookie header, or joining DevTools' Application >
+// Cookies rows) into the objects page.setCookie() expects.
+function parseCookieString(raw) {
+    return raw
+        .split(';')
+        .map((pair) => {
+            const idx = pair.indexOf('=');
+            if (idx === -1) return null;
+            const name = pair.slice(0, idx).trim();
+            const value = pair.slice(idx + 1).trim();
+            if (!name) return null;
+            return { name, value, domain: '.discord.com', path: '/' };
+        })
+        .filter(Boolean);
+}
 
 async function solveTurnstile(page, captchalyApiKey) {
     if (!captchalyApiKey) return;
@@ -47,7 +69,7 @@ async function solveTurnstile(page, captchalyApiKey) {
     }
 }
 
-async function run({ token, botId, captchalyApiKey }) {
+async function run({ cookie, botId, captchalyApiKey }) {
     let browser;
     try {
         browser = await puppeteer.launch({
@@ -78,15 +100,11 @@ async function run({ token, botId, captchalyApiKey }) {
         await page.setViewport({ width: 1280, height: 800 });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-        const injectToken = (t) => {
-            const formatted = t.startsWith('"') ? t : `"${t}"`;
-            try { window.localStorage.setItem('token', formatted); } catch (e) {}
-        };
-
-        await page.evaluateOnNewDocument(injectToken, token);
-        await page.goto('https://discord.com/channels/@me', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-        await delay(4000);
-        await page.evaluate(injectToken, token);
+        const cookies = parseCookieString(cookie || '');
+        if (cookies.length === 0) {
+            return { success: false, message: 'No valid cookies provided' };
+        }
+        await page.setCookie(...cookies);
 
         await page.goto('https://top.gg/login', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
         await delay(6000);
