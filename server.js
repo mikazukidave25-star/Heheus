@@ -15,13 +15,13 @@ app.post('/vote', async (req, res) => {
         return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    const { token, botId, captchalyApiKey } = req.body || {};
-    if (!token || !botId) {
-        return res.status(400).json({ success: false, message: 'Missing token or botId' });
+    const { cookie, botId, captchalyApiKey } = req.body || {};
+    if (!cookie || !botId) {
+        return res.status(400).json({ success: false, message: 'Missing cookie or botId' });
     }
 
     try {
-        const result = await run({ token, botId, captchalyApiKey });
+        const result = await run({ cookie, botId, captchalyApiKey });
         res.json(result);
     } catch (error) {
         res.status(500).json({ success: false, message: error && error.message ? error.message : String(error) });
