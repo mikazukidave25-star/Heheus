@@ -18,10 +18,37 @@ const CHROME_PATH = process.env.CHROME_PATH || '/usr/bin/chromium';
 
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
-// Parses a raw "name=value; name2=value2" cookie header string (the format
-// you get copying the Cookie header, or joining DevTools' Application >
-// Cookies rows) into the objects page.setCookie() expects.
-function parseCookieString(raw) {
+// Accepts either a JSON array exported from a cookie-manager browser
+// extension (Cookie-Editor and similar: [{name, value, domain, path,
+// expirationDate, httpOnly, secure, ...}, ...]) or a raw
+// "name=value; name2=value2" header string (assumed to be for
+// discord.com), and returns the array page.setCookie() expects.
+function normalizeCookies(raw) {
+    if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (trimmed.startsWith('[')) {
+            try {
+                raw = JSON.parse(trimmed);
+            } catch (e) {
+                // Not valid JSON after all - fall through to the plain
+                // string parser below.
+            }
+        }
+    }
+
+    if (Array.isArray(raw)) {
+        return raw
+            .filter((c) => c && c.name && c.domain)
+            .map((c) => {
+                const cookie = { name: c.name, value: c.value, domain: c.domain, path: c.path || '/' };
+                if (c.expirationDate) cookie.expires = Math.floor(c.expirationDate);
+                if (typeof c.httpOnly === 'boolean') cookie.httpOnly = c.httpOnly;
+                if (typeof c.secure === 'boolean') cookie.secure = c.secure;
+                return cookie;
+            });
+    }
+
+    if (typeof raw !== 'string') return [];
     return raw
         .split(';')
         .map((pair) => {
@@ -100,7 +127,7 @@ async function run({ cookie, botId, captchalyApiKey }) {
         await page.setViewport({ width: 1280, height: 800 });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-        const cookies = parseCookieString(cookie || '');
+        const cookies = normalizeCookies(cookie || '');
         if (cookies.length === 0) {
             return { success: false, message: 'No valid cookies provided' };
         }
