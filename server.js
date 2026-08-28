@@ -20,8 +20,16 @@ app.post('/vote', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Missing cookie or botId' });
     }
 
+    // Safety net: always respond within 170s (comfortably under the Python
+    // side's 200s client timeout) even if something inside run() hangs
+    // unexpectedly, instead of leaving the request to time out silently on
+    // the caller's end with no useful error message.
+    const timeout = new Promise((resolve) => {
+        setTimeout(() => resolve({ success: false, message: 'vote-service: run() did not finish within 170s (internal timeout)' }), 170000);
+    });
+
     try {
-        const result = await run({ cookie, botId, captchalyApiKey });
+        const result = await Promise.race([run({ cookie, botId, captchalyApiKey }), timeout]);
         res.json(result);
     } catch (error) {
         res.status(500).json({ success: false, message: error && error.message ? error.message : String(error) });
