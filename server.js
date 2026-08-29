@@ -1,5 +1,29 @@
 const express = require('express');
+const { execSync } = require('child_process');
 const { run } = require('./vote');
+
+// Puppeteer/CDP errors sometimes surface as truly uncaught exceptions (thrown
+// from an internal event handler, outside the normal promise chain a plain
+// try/catch around run() can see) - without these, one such error kills the
+// whole Node process, and Render has to notice and restart the entire
+// service before it can serve the next vote attempt.
+function killOrphanedChrome() {
+    try {
+        execSync(`pkill -f "${process.env.CHROME_PATH || '/usr/bin/chromium'}"`, { stdio: 'ignore' });
+    } catch (e) {
+        // pkill exits non-zero if nothing matched - fine either way.
+    }
+}
+
+process.on('uncaughtException', (err) => {
+    console.error('[uncaughtException]', err && err.stack ? err.stack : err);
+    killOrphanedChrome();
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('[unhandledRejection]', reason);
+    killOrphanedChrome();
+});
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
