@@ -111,6 +111,7 @@ async function run({ cookie, botId, captchalyApiKey }) {
         browser = await puppeteer.launch({
             headless: 'new',
             executablePath: CHROME_PATH,
+            protocolTimeout: 300000,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
