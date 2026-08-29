@@ -104,8 +104,10 @@ async function solveTurnstile(page, captchalyApiKey) {
 }
 
 async function run({ cookie, botId, captchalyApiKey }) {
+    const step = (label) => process.stderr.write(`[${new Date().toISOString()}] ${label}\n`);
     let browser;
     try {
+        step('Launching browser');
         browser = await puppeteer.launch({
             headless: 'new',
             executablePath: CHROME_PATH,
@@ -129,6 +131,7 @@ async function run({ cookie, botId, captchalyApiKey }) {
                 '--js-flags=--max-old-space-size=128',
             ],
         });
+        step('Browser launched');
 
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 800 });
@@ -139,12 +142,18 @@ async function run({ cookie, botId, captchalyApiKey }) {
             return { success: false, message: 'No valid cookies provided' };
         }
         await page.setCookie(...cookies);
+        step(`Cookies set (${cookies.length})`);
 
+        step('Navigating to top.gg/login');
         await page.goto('https://top.gg/login', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+        step(`Landed on ${page.url()}`);
         await delay(6000);
+        step('Solving turnstile (login page, if present)');
         await solveTurnstile(page, captchalyApiKey);
+        step('Done with login-page turnstile step');
 
         if (page.url().includes('discord.com/oauth2')) {
+            step('On Discord OAuth authorize page');
             await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
             await delay(2000);
             await page.evaluate(() => {
@@ -159,15 +168,21 @@ async function run({ cookie, botId, captchalyApiKey }) {
                 if (authBtn) { authBtn.click(); return true; }
                 return false;
             });
+            step(`Authorize button clicked: ${authClicked}`);
             if (authClicked) {
                 await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
                 await delay(4000);
+                step(`After authorize, landed on ${page.url()}`);
             }
         }
 
+        step('Navigating to vote page');
         await page.goto(`https://top.gg/bot/${botId}/vote`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+        step(`Landed on ${page.url()}`);
         await delay(15000);
+        step('Solving turnstile (vote page, if present)');
         await solveTurnstile(page, captchalyApiKey);
+        step('Done with vote-page turnstile step');
 
         await page.evaluate(() => window.scrollBy(0, 800));
         await delay(2000);
@@ -178,6 +193,7 @@ async function run({ cookie, botId, captchalyApiKey }) {
         });
         await delay(3000);
 
+        step('Waiting for vote button');
         let btnData = { status: 'not_found' };
         for (let attempt = 1; attempt <= 8; attempt++) {
             btnData = await page.evaluate(() => {
@@ -195,6 +211,7 @@ async function run({ cookie, botId, captchalyApiKey }) {
             if (btnData.status !== 'not_found') break;
             await delay(5000);
         }
+        step(`Vote button search result: ${btnData.status}`);
 
         if (btnData.status === 'already') {
             return { success: true, message: 'Already voted' };
@@ -212,15 +229,19 @@ async function run({ cookie, botId, captchalyApiKey }) {
         }
 
         await delay(1500);
+        step('Clicking vote button');
         await page.mouse.click(btnData.x, btnData.y);
         await delay(3000);
+        step('Solving turnstile (post-click, if present)');
         await solveTurnstile(page, captchalyApiKey);
+        step('Done with post-click turnstile step');
         await delay(6000);
 
         const isSuccess = await page.evaluate(() => {
             const text = document.body.innerText.toLowerCase();
             return text.includes('thank you for voting') || text.includes('thanks for voting') || text.includes('already voted') || text.includes('successfully voted');
         });
+        step(`Final confirmation check: ${isSuccess}`);
 
         return isSuccess
             ? { success: true, message: 'Voted successfully' }
