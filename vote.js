@@ -138,6 +138,23 @@ async function run({ cookie, botId, captchalyApiKey }) {
         await page.setViewport({ width: 1280, height: 800 });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
+        // Skip loading/rendering anything not needed to find and click the
+        // vote button - images, fonts, and third-party ad/analytics scripts
+        // are a big chunk of memory use on an ad-heavy page like top.gg's,
+        // and RAM is the tight resource on a free instance.
+        const BLOCKED_TYPES = new Set(['image', 'media', 'font']);
+        const BLOCKED_HOSTS = ['google-analytics.com', 'googletagmanager.com', 'doubleclick.net', 'googlesyndication.com', 'adsystem', 'criteo.com', 'facebook.net', 'connect.facebook.net', 'quantserve.com', 'scorecardresearch.com'];
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const type = req.resourceType();
+            const url = req.url();
+            if (BLOCKED_TYPES.has(type) || BLOCKED_HOSTS.some((h) => url.includes(h))) {
+                req.abort().catch(() => {});
+            } else {
+                req.continue().catch(() => {});
+            }
+        });
+
         const cookies = normalizeCookies(cookie || '');
         if (cookies.length === 0) {
             return { success: false, message: 'No valid cookies provided' };
@@ -180,7 +197,7 @@ async function run({ cookie, botId, captchalyApiKey }) {
         step('Navigating to vote page');
         await page.goto(`https://top.gg/bot/${botId}/vote`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
         step(`Landed on ${page.url()}`);
-        await delay(15000);
+        await delay(8000);
         step('Solving turnstile (vote page, if present)');
         await solveTurnstile(page, captchalyApiKey);
         step('Done with vote-page turnstile step');
